@@ -13,9 +13,9 @@ local STATE_FILE = "dog.state"
 
 local max_depth = 512
 local geoscanner_range = 8
+local max_distance = 64
 local scan = nil
 local do_fuel = false
-local max_distance = 64
 local mining_x, mining_z = 0, 0
 
 local parser = simple_argparse.new_parser("dog", "Mining turtle program that detects and mines ores efficiently.")
