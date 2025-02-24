@@ -1022,6 +1022,10 @@ if not ok then
       end
     until return_home()
   end)
+
+  while true do
+	
+  end
 end
 
 -- ensure the prompt is on the terminal.
