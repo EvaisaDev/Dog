@@ -390,6 +390,11 @@ end
 
 local ore_context = logging.create_context("Ore")
 
+local function is_ore(block)
+  -- if in ore dict or contains "ore" in the name, it's an ore.
+  return ORE_DICT[block.name] or block.name:find("ore")
+end
+
 --- Get the closest ore to the turtle.
 ---@return integer? closest_ore_index The index of the closest ore in the last scan, or nil if no ores were found in the scan.
 ---@param initial_facing turtle_facing? The direction the turtle was facing when it started digging.
@@ -415,7 +420,7 @@ local function get_closest_ore(initial_facing)
         or block.z < -max_offset or block.z > max_offset
     end
 
-    if not out_of_range and true and distance < closest_distance then
+    if not out_of_range and is_ore(block.name) and distance < closest_distance then
       closest_ore = i
       closest_distance = distance
     end
