@@ -3,65 +3,105 @@ package.path = package.path .. ";lib/?.lua;lib/?/init.lua"
 
 local aid = require("turtle_aid")
 local file_helper = require("file_helper")
-local root_folder = file_helper:instanced("")
-local data_folder = file_helper:instanced("data")
 local logging = require("logging")
-local simple_argparse = require("simple_argparse")
 
-local LOG_FILE = fs.combine(data_folder.working_directory, ("dog%d.log"):format(math.random(0, 100000)))
+local LOG_FILE = fs.combine("data", ("dog%d.log"):format(math.random(0, 100000)))
 local STATE_FILE = "dog.state"
 
 local max_depth = 512
 local geoscanner_range = 8
+local max_offset = 8
 local max_distance = 64
 local scan = nil
-local do_fuel = false
-local mining_x, mining_z = 0, 0
+local do_fuel = true
+local start_x, start_z = 0, 0
 
-local parser = simple_argparse.new_parser("dog", "Mining turtle program that detects and mines ores efficiently.")
-parser.add_option("depth", "Max depth to mine.", max_depth)
-parser.add_option("georange", "Geoscanner range.", geoscanner_range)
-parser.add_flag("f", "fuel", "Enable auto-refueling.")
-parser.add_option("maxdistance", "Maximum horizontal distance from home.", max_distance)
-
-local parsed = parser.parse(table.pack(...))
-if parsed.flags.fuel then do_fuel = true end
-if parsed.options.depth then max_depth = tonumber(parsed.options.depth) end
-if parsed.options.georange then geoscanner_range = tonumber(parsed.options.georange) end
-if parsed.options.maxdistance then max_distance = tonumber(parsed.options.maxdistance) end
-
-logging.set_level(logging.LOG_LEVEL.INFO)
-
-local function move_to(x, y, z)
-    while aid.position.x ~= x do
-        if aid.position.x < x then aid.face(1); aid.go_forward()
-        else aid.face(3); aid.go_forward() end
-    end
-    while aid.position.z ~= z do
-        if aid.position.z < z then aid.face(0); aid.go_forward()
-        else aid.face(2); aid.go_forward() end
-    end
-    while aid.position.y < y do aid.gravel_protected_dig_up(); aid.go_up() end
-    while aid.position.y > y do turtle.digDown(); aid.go_down() end
+local function init_logger()
+    logging.set_level(logging.LOG_LEVEL.INFO)
 end
 
-local function dump_inventory()
-    move_to(0, 0, 0)
-    while not aid.find_chest() do sleep(5) end
-    for i = 1, 16 do
-        turtle.select(i)
-        if do_fuel then turtle.refuel() end
-        turtle.drop()
+local function initialize()
+    local setup_context = logging.create_context("Setup")
+    setup_context.info("Checking for pickaxe and scanner.")
+
+    local scanner, geoscanner = aid.is_module_equipped("scanner"), aid.is_module_equipped("geoScanner")
+
+    if scanner or geoscanner then
+        setup_context.debug("Found scanner.")
+    else
+        if aid.swap_module("scanner", "left") then
+            scanner = "left"
+            setup_context.debug("Found scanner.")
+        elseif aid.swap_module("geoScanner", "left") then
+            geoscanner = "left"
+            setup_context.debug("Found geoscanner.")
+        else
+            error("No scanner or geoscanner found.", 0)
+        end
     end
-    turtle.select(1)
+
+    if aid.is_module_equipped("pickaxe") then
+        setup_context.debug("Found pickaxe.")
+    else
+        if aid.swap_module("pickaxe", "right") then
+            setup_context.debug("Found pickaxe.")
+        else
+            error("No pickaxe found.", 0)
+        end
+    end
+
+    if scanner then
+        setup_context.debug("Using scanner on", scanner, "side.")
+        scan = function() return peripheral.call(scanner, "scan") end
+    end
+
+    if geoscanner then
+        setup_context.debug("Using geoscanner on", geoscanner, "side.")
+        scan = function() return peripheral.call(geoscanner, "scan", geoscanner_range) end
+    end
 end
 
-local function check_fuel()
-    return turtle.getFuelLevel() < (math.abs(aid.position.y) + math.abs(aid.position.z) + math.abs(aid.position.x) + 10)
+local ORE_DICT = {
+    ["minecraft:iron_ore"] = true,
+    ["minecraft:deepslate_iron_ore"] = true,
+    ["minecraft:copper_ore"] = true,
+    ["minecraft:deepslate_copper_ore"] = true,
+    ["minecraft:gold_ore"] = true,
+    ["minecraft:deepslate_gold_ore"] = true,
+    ["minecraft:diamond_ore"] = true,
+    ["minecraft:deepslate_diamond_ore"] = true,
+    ["minecraft:coal_ore"] = true,
+    ["minecraft:deepslate_coal_ore"] = true,
+    ["minecraft:lapis_ore"] = true,
+    ["minecraft:deepslate_lapis_ore"] = true,
+    ["minecraft:emerald_ore"] = true,
+    ["minecraft:deepslate_emerald_ore"] = true,
+    ["minecraft:redstone_ore"] = true,
+    ["minecraft:deepslate_redstone_ore"] = true,
+    ["minecraft:nether_gold_ore"] = true,
+    ["minecraft:ancient_debris"] = true
+}
+
+local FORBIDDEN_BLOCKS = {
+    ["minecraft:chest"] = true,
+    ["minecraft:trapped_chest"] = true,
+    ["minecraft:ender_chest"] = true
+}
+
+local state = {
+    state = "digdown",
+    state_info = { depth = 0, x = 0, z = 0 }
+}
+
+local function save_state()
+    file_helper:instanced("data"):serialize(STATE_FILE, state, true)
 end
 
-local function check_inventory()
-    return turtle.getItemCount(15) > 0
+local function load_state()
+    local loaded_state = file_helper:instanced("data"):unserialize(STATE_FILE, { state = "digdown", state_info = { depth = 0, x = 0, z = 0 } })
+    if loaded_state then
+        state = loaded_state
+    end
 end
 
 local function scan_ores()
@@ -71,56 +111,132 @@ local function scan_ores()
     end
 end
 
-local function dig_down()
-    if aid.position.y < -max_depth then return true end
-    if turtle.detectDown() then
-        local success, block = turtle.inspectDown()
-        if success and block.name == "minecraft:bedrock" then return true end
+local function get_closest_ore()
+    local closest_ore
+    local closest_distance = math.huge
+
+    for i, block in ipairs(state.state_info.last_scan or {}) do
+        local distance = math.abs(block.x - aid.position.x) + math.abs(block.y - aid.position.y) + math.abs(block.z - aid.position.z)
+        if ORE_DICT[block.name] and distance < closest_distance then
+            closest_ore = i
+            closest_distance = distance
+        end
     end
+
+    return closest_ore
+end
+
+local function check_next_ore()
     scan_ores()
+    local ore_index = get_closest_ore()
+    if ore_index then
+        state.state_info.ore_index = ore_index
+        state.state_info.ore = state.state_info.last_scan[ore_index]
+        state.state = "seeking"
+        return true
+    end
+    return false
+end
+
+local function dig_down()
+    if aid.position.y < -max_depth then
+        state.state = "returning_home"
+        return
+    end
+
+    if check_next_ore() then return end
+
     turtle.digDown()
     aid.go_down()
-    return false
+    state.state_info.depth = aid.position.y
 end
 
-local function seek_and_mine()
-    scan_ores()
-    for _, ore in ipairs(state.state_info.last_scan) do
-        if ORE_DICT[ore.name] then
-            move_to(ore.x, ore.y, ore.z)
-            turtle.dig()
-            return true
+local function return_home()
+    while aid.position.y < 0 do
+        turtle.digUp()
+        aid.go_up()
+    end
+    return true
+end
+
+local function dump_inventory()
+    while not aid.find_chest() do
+        sleep(5)
+    end
+
+    for i = 1, 16 do
+        if turtle.getItemCount(i) > 0 then
+            turtle.select(i)
+            if do_fuel and turtle.refuel() then
+                logging.create_context("Fuel").info("Refueled to", turtle.getFuelLevel())
+            end
+            turtle.drop()
         end
     end
-    return false
+
+    turtle.select(1)
 end
 
-local function mine_column()
-    move_to(mining_x, 0, mining_z)
-    while not dig_down() do
-        if seek_and_mine() then mine_column() end
-    end
-    move_to(0, 0, 0)
-end
-
-local function explore_area()
-    for x = 0, max_distance, 2 do
-        for z = 0, max_distance, 2 do
-            mining_x, mining_z = x, z
-            mine_column()
-            if check_fuel() or check_inventory() then dump_inventory() end
+local function move_to_next_column()
+    state.state_info.x = state.state_info.x + 1
+    if state.state_info.x >= max_distance then
+        state.state_info.x = 0
+        state.state_info.z = state.state_info.z + 1
+        if state.state_info.z >= max_distance then
+            logging.create_context("Main").info("Finished mining the 64x64 area.")
+            return false
         end
     end
+    aid.go_to(state.state_info.x, 0, state.state_info.z)
+    return true
 end
 
 local function main()
-    explore_area()
-    print("Mining complete. Returning home.")
-    move_to(0, 0, 0)
+    aid.set_retrace_distance(math.min(16, max_offset * 4))
+
+    if aid.position.y == 0 then
+        if state.state_info.x == 0 and state.state_info.z == 0 then
+            aid.go_forward()
+        end
+    end
+
+    turtle.select(1)
+
+    while true do
+        if state.state == "digdown" then
+            dig_down()
+        elseif state.state == "seeking" then
+            local ore = state.state_info.ore
+            aid.go_to(ore.x, ore.y, ore.z)
+            turtle.dig()
+            table.remove(state.state_info.last_scan, state.state_info.ore_index)
+            if not check_next_ore() then
+                state.state = "returning_from_seek"
+            end
+        elseif state.state == "returning_home" then
+            if return_home() then
+                dump_inventory()
+                if not move_to_next_column() then break end
+                state.state = "digdown"
+            end
+        elseif state.state == "returning_from_seek" then
+            aid.go_to(state.state_info.x, 0, state.state_info.z)
+            state.state = "digdown"
+        end
+
+        if turtle.getItemCount(16) > 0 then
+            state.state = "returning_home"
+        end
+
+        if turtle.getFuelLevel() < max_depth then
+            state.state = "returning_home"
+        end
+    end
+
+    logging.create_context("Main").info("Mining complete.")
 end
 
-local ok, err = pcall(main)
-if not ok then
-    logging.error("Error: " .. err)
-    move_to(0, 0, 0)
-end
+init_logger()
+initialize()
+load_state()
+main()
