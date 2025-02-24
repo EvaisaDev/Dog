@@ -24,6 +24,8 @@ local main_win = term.current()
 local max_depth = 512
 local log_level = logging.LOG_LEVEL.INFO
 local tx, ty = term.getSize()
+local log_win = window.create(window.create(main_win, 1, 1, tx, 7), 1, 1, tx, 8) -- overlap the height by one so we can print to the bottom of the window.
+local data_win = window.create(main_win, 1, 8, tx, ty - 7)
 local geoscanner_range = 8
 local max_offset = 8
 local scan = nil ---@type fun():table<integer, table> Set during initialization.
@@ -103,7 +105,7 @@ if parsed.arguments[1] then
 end
 
 logging.set_level(log_level)
-logging.set_window(main_win)
+logging.set_window(log_win)
 
 -- Initial setup
 do
@@ -418,7 +420,7 @@ local function get_closest_ore(initial_facing)
         or block.z < -max_offset or block.z > max_offset
     end
 
-    if not out_of_range and is_ore(block.name) and distance < closest_distance then
+    if not out_of_range and is_ore(block) and distance < closest_distance then
       closest_ore = i
       closest_distance = distance
     end
@@ -782,80 +784,80 @@ end
 local bark_rng = 0.0001
 local bark_multiplier = BARK_MULTIPLIER()
 local function draw_data()
-  -- Draw data to main_win
-  main_win.setBackgroundColor(colors.gray)
-  main_win.clear()
-  main_win.setCursorPos(1, 1)
+  -- Draw data to data_win
+  data_win.setBackgroundColor(colors.gray)
+  data_win.clear()
+  data_win.setCursorPos(1, 1)
 
   -- horizontal gray line
-  main_win.setTextColor(colors.white)
-  main_win.write(string.rep('\x8c', tx))
-  main_win.setCursorPos(math.ceil(tx / 2) - 3, 1)
-  main_win.write(" DATA ")
+  data_win.setTextColor(colors.white)
+  data_win.write(string.rep('\x8c', tx))
+  data_win.setCursorPos(math.ceil(tx / 2) - 3, 1)
+  data_win.write(" DATA ")
 
   -- write position data
-  main_win.setCursorPos(1, 2)
-  main_win.write(("Turtle: X: % 3d Y: % 3d Z: % 3d"):format(aid.position.x, aid.position.y, aid.position.z))
+  data_win.setCursorPos(1, 2)
+  data_win.write(("Turtle: X: % 3d Y: % 3d Z: % 3d"):format(aid.position.x, aid.position.y, aid.position.z))
 
   -- write state data
-  main_win.setCursorPos(1, 3)
-  main_win.write("State: " .. state.state)
+  data_win.setCursorPos(1, 3)
+  data_win.write("State: " .. state.state)
 
   if state.state == "seeking" then
-    main_win.setCursorPos(1, 4)
+    data_win.setCursorPos(1, 4)
     if state.state_info.ore then
-      main_win.write("Seeking: " .. state.state_info.ore.name)
+      data_win.write("Seeking: " .. state.state_info.ore.name)
     else
-      main_win.write("Seeking: Unknown")
+      data_win.write("Seeking: Unknown")
     end
 
-    main_win.setCursorPos(1, 5)
+    data_win.setCursorPos(1, 5)
     if state.state_info.ore then
-      main_win.write(("  At: X: % 3d Y: % 3d Z: % 3d"):format(
+      data_win.write(("  At: X: % 3d Y: % 3d Z: % 3d"):format(
         state.state_info.ore.x,
         state.state_info.ore.y,
         state.state_info.ore.z
       ))
     else
-      main_win.write("  At: Unknown")
+      data_win.write("  At: Unknown")
     end
   elseif state.state == "digdown" then
-    main_win.setCursorPos(1, 4)
-    main_win.write("Depth: " .. tostring(aid.position.y))
+    data_win.setCursorPos(1, 4)
+    data_win.write("Depth: " .. tostring(aid.position.y))
   elseif state.state == "returning_home" then
-    main_win.setCursorPos(1, 4)
-    main_win.write("Returning Home.")
+    data_win.setCursorPos(1, 4)
+    data_win.write("Returning Home.")
   elseif state.state == "returning_from_seek" then
-    main_win.setCursorPos(1, 4)
-    main_win.write("Returning to last known height.")
+    data_win.setCursorPos(1, 4)
+    data_win.write("Returning to last known height.")
 
-    main_win.setCursorPos(1, 5)
-    main_win.write("  Target depth: " .. tostring(state.state_info.depth))
+    data_win.setCursorPos(1, 5)
+    data_win.write("  Target depth: " .. tostring(state.state_info.depth))
   elseif state.state == "errored" then
-    main_win.setCursorPos(1, 4)
-    main_win.write("Errored. On way home.")
+    data_win.setCursorPos(1, 4)
+    data_win.write("Errored. On way home.")
   end
 
   -- Write fuel data
-  main_win.setCursorPos(1, 6)
-  local old_color = main_win.getTextColor()
+  data_win.setCursorPos(1, 6)
+  local old_color = data_win.getTextColor()
 
   local dist = distance_to_home()
   local level = turtle.getFuelLevel()
 
   if level < dist + 50 then
-    main_win.setTextColor(colors.red)
+    data_win.setTextColor(colors.red)
   elseif level < dist + 100 then
-    main_win.setTextColor(colors.orange)
+    data_win.setTextColor(colors.orange)
   elseif level < dist + 400 then
-    main_win.setTextColor(colors.yellow)
+    data_win.setTextColor(colors.yellow)
   else
-    main_win.setTextColor(colors.green)
+    data_win.setTextColor(colors.green)
   end
 
-  main_win.write(("Fuel: %d / %d"):format(level, turtle.getFuelLimit()))
+  data_win.write(("Fuel: %d / %d"):format(level, turtle.getFuelLimit()))
 
-  main_win.setTextColor(old_color)
+  data_win.setTextColor(old_color)
 end
 
 local BARK_CONTEXT = logging.create_context("BARKBARK")
@@ -904,7 +906,8 @@ local function BARK()
   end
 
   -- redraw the main windows.
-  --main_win.redraw()
+  log_win.redraw()
+  data_win.redraw()
 end
 
 --- BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK
@@ -948,7 +951,7 @@ local function main()
       BARK()
     end
 
-    --draw_data()
+    draw_data()
 
     if state.state == "digdown" then
       if horizontal then
@@ -1006,17 +1009,17 @@ data_folder:delete(STATE_FILE)
 if not ok then
   sleep() -- in case this was an infinite loop related error.
   main_context.fatal(err)
-  --main_context.info("Dumped log as", LOG_FILE)
+  main_context.info("Dumped log as", LOG_FILE)
 
   state.state = "errored"
 
   -- Attempt to return home to protect the turtle from becoming lost underground.
   pcall(function()
-    --main_context.warn("Threw error! Attempting to return home!")
+    main_context.warn("Threw error! Attempting to return home!")
 
     local x = 0
     repeat
-      --pcall(draw_data)
+      pcall(draw_data)
       x = x + 1
       if x > 300 then -- 300 chosen arbitrarily. This may or may not be a good value.
         main_context.fatal("Unable to return home, aborting.")
@@ -1027,5 +1030,5 @@ if not ok then
 end
 
 -- ensure the prompt is on the terminal.
---term.setCursorPos(1, ty)
---print()
+term.setCursorPos(1, ty)
+print()
