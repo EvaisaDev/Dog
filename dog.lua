@@ -555,7 +555,8 @@ data_folder:delete(STATE_FILE)
 
 if not ok then
   sleep()
-  main_win.fatal(err)
+  --main_win.fatal(err)
+  write("Error: " .. err)
   state.state = "errored"
   pcall(function()
     local x = 0
