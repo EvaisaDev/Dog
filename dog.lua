@@ -555,9 +555,7 @@ data_folder:delete(STATE_FILE)
 
 if not ok then
   sleep()
-  --logging.log(logging.LOG_LEVEL.FATAL, "Main", err)
   main_win.fatal(err)
-  --logging.dump_log(nil)
   state.state = "errored"
   pcall(function()
     local x = 0
