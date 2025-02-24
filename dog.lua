@@ -1006,9 +1006,12 @@ main_context.debug("Cleaning up...")
 aid.clear_save()
 data_folder:delete(STATE_FILE)
 
+local last_output = ""
+
 if not ok then
   sleep() -- in case this was an infinite loop related error.
   main_context.fatal(err)
+  last_output = err
   main_context.info("Dumped log as", LOG_FILE)
 
   state.state = "errored"
@@ -1031,4 +1034,4 @@ end
 
 -- ensure the prompt is on the terminal.
 term.setCursorPos(1, ty)
-print()
+print(last_output)
