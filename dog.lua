@@ -10,11 +10,9 @@ local STATE_FILE = "dog.state"
 
 local max_depth = 512
 local geoscanner_range = 8
-local max_offset = 8
 local max_distance = 64
 local scan = nil
 local do_fuel = true
-local start_x, start_z = 0, 0
 
 local function init_logger()
     logging.set_level(logging.LOG_LEVEL.INFO)
@@ -80,12 +78,6 @@ local ORE_DICT = {
     ["minecraft:deepslate_redstone_ore"] = true,
     ["minecraft:nether_gold_ore"] = true,
     ["minecraft:ancient_debris"] = true
-}
-
-local FORBIDDEN_BLOCKS = {
-    ["minecraft:chest"] = true,
-    ["minecraft:trapped_chest"] = true,
-    ["minecraft:ender_chest"] = true
 }
 
 local state = {
@@ -187,17 +179,29 @@ local function move_to_next_column()
             return false
         end
     end
-    aid.go_to(state.state_info.x, 0, state.state_info.z)
+    aid.navigate_to(state.state_info.x, 0, state.state_info.z)
     return true
 end
 
-local function main()
-    aid.set_retrace_distance(math.min(16, max_offset * 4))
+local function ask_direction()
+    print("What direction is the turtle facing (north, south, east, west)? Use the F3 menu to check.")
+    local _direction
+    repeat
+        _direction = read()
+    until _direction == "north" or _direction == "south" or _direction == "east" or _direction == "west"
 
-    if aid.position.y == 0 then
-        if state.state_info.x == 0 and state.state_info.z == 0 then
-            aid.go_forward()
-        end
+    aid.facing = _direction == "north" and 0 or _direction == "east" and 1 or _direction == "south" and 2 or 3
+end
+
+local function main()
+    if not aid.is_module_equipped("scanner") then
+        ask_direction()
+    end
+
+    aid.set_retrace_distance(16)
+
+    if aid.position.y == 0 and state.state_info.x == 0 and state.state_info.z == 0 then
+        aid.go_forward()
     end
 
     turtle.select(1)
@@ -207,7 +211,7 @@ local function main()
             dig_down()
         elseif state.state == "seeking" then
             local ore = state.state_info.ore
-            aid.go_to(ore.x, ore.y, ore.z)
+            aid.navigate_to(ore.x, ore.y, ore.z)
             turtle.dig()
             table.remove(state.state_info.last_scan, state.state_info.ore_index)
             if not check_next_ore() then
@@ -220,16 +224,8 @@ local function main()
                 state.state = "digdown"
             end
         elseif state.state == "returning_from_seek" then
-            aid.go_to(state.state_info.x, 0, state.state_info.z)
+            aid.navigate_to(state.state_info.x, 0, state.state_info.z)
             state.state = "digdown"
-        end
-
-        if turtle.getItemCount(16) > 0 then
-            state.state = "returning_home"
-        end
-
-        if turtle.getFuelLevel() < max_depth then
-            state.state = "returning_home"
         end
     end
 
