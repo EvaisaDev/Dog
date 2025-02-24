@@ -1,8 +1,8 @@
 --- Simple program to be used as an installer script. Copy to repos and insert what is needed.
 
 local to_get = {
-  "extern:dog.lua:https://raw.githubusercontent.com/Fatboychummy-CC/Dog/refresh/dog.lua",
-  "extern:lib/turtle_aid.lua:https://raw.githubusercontent.com/Fatboychummy-CC/Dog/refresh/lib/turtle_aid.lua",
+  "extern:dog.lua:https://raw.githubusercontent.com/EvaisaDev/Dog/refresh/dog.lua",
+  "extern:lib/turtle_aid.lua:https://raw.githubusercontent.com/EvaisaDev/Dog/refresh/lib/turtle_aid.lua",
   "lib/file_helper.lua:file_helper.lua",
   "lib/logging.lua:logging.lua",
   "lib/simple_argparse.lua:simple_argparse.lua",
