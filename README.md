@@ -6,7 +6,7 @@ Dog fetches ore, and like a good boy he brings it back.
 2. Pickaxe mounted on the other side
 
 # Usage
-1. Run `wget run https://raw.githubusercontent.com/Fatboychummy-CC/Dog/refresh/installer.lua`
+1. Run `wget run https://raw.githubusercontent.com/EvaisaDev/Dog/refresh/installer.lua`
 2. Confirm the installer's prompts.
 3. Run `dog.lua`
 
