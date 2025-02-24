@@ -555,8 +555,9 @@ data_folder:delete(STATE_FILE)
 
 if not ok then
   sleep()
-  logging.log(logging.LOG_LEVEL.FATAL, "Main", err)
-  logging.dump_log(nil)
+  --logging.log(logging.LOG_LEVEL.FATAL, "Main", err)
+  main_win.fatal(err)
+  --logging.dump_log(nil)
   state.state = "errored"
   pcall(function()
     local x = 0
@@ -569,8 +570,34 @@ if not ok then
     until return_home()
   end)
 else
-  logging.dump_log(nil)
+  --logging.dump_log(nil)
 end
+
+--[[
+if not ok then
+  sleep() -- in case this was an infinite loop related error.
+  main_context.fatal(err)
+  logging.dump_log(LOG_FILE)
+  main_context.info("Dumped log as", LOG_FILE)
+
+  state.state = "errored"
+
+  -- Attempt to return home to protect the turtle from becoming lost underground.
+  pcall(function()
+    main_context.warn("Threw error! Attempting to return home!")
+
+    local x = 0
+    repeat
+      pcall(draw_data)
+      x = x + 1
+      if x > 300 then -- 300 chosen arbitrarily. This may or may not be a good value.
+        main_context.fatal("Unable to return home, aborting.")
+        break
+      end
+    until return_home()
+  end)
+end
+]]
 
 print("Press Enter to close...")
 read()
