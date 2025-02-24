@@ -951,7 +951,7 @@ local function main()
       BARK()
     end
 
-    draw_data()
+    --draw_data()
 
     if state.state == "digdown" then
       if horizontal then
@@ -1009,7 +1009,7 @@ data_folder:delete(STATE_FILE)
 if not ok then
   sleep() -- in case this was an infinite loop related error.
   main_context.fatal(err)
-  main_context.info("Dumped log as", LOG_FILE)
+  --main_context.info("Dumped log as", LOG_FILE)
 
   state.state = "errored"
 
