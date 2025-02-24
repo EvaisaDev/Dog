@@ -900,8 +900,8 @@ local function BARK()
   end
 
   -- redraw the main windows.
-  log_win.redraw()
-  data_win.redraw()
+  --log_win.redraw()
+  --data_win.redraw()
 end
 
 --- BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK BARK
