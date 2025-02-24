@@ -1006,12 +1006,9 @@ main_context.debug("Cleaning up...")
 aid.clear_save()
 data_folder:delete(STATE_FILE)
 
-local last_output = ""
-
 if not ok then
   sleep() -- in case this was an infinite loop related error.
   main_context.fatal(err)
-  last_output = err
   main_context.info("Dumped log as", LOG_FILE)
 
   state.state = "errored"
@@ -1022,7 +1019,7 @@ if not ok then
 
     local x = 0
     repeat
-      pcall(draw_data)
+      --pcall(draw_data)
       x = x + 1
       if x > 300 then -- 300 chosen arbitrarily. This may or may not be a good value.
         main_context.fatal("Unable to return home, aborting.")
@@ -1034,4 +1031,4 @@ end
 
 -- ensure the prompt is on the terminal.
 term.setCursorPos(1, ty)
-print(last_output)
+print()
