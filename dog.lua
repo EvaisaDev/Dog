@@ -29,7 +29,7 @@ local data_win = window.create(main_win, 1, 8, tx, ty - 7)
 local geoscanner_range = 8
 local max_offset = 8
 local scan = nil ---@type fun():table<integer, table> Set during initialization.
-local do_fuel = false
+local do_fuel = true
 local horizontal = false
 local version = "V0.14.3"
 local latest_changes = [[Added a few more blocks as ores. If you wish to add some that are missing, PRs are open!]]
@@ -42,7 +42,6 @@ parser.add_option("exclude", "A file (lua table) containing ores to exclude from
 parser.add_option("include", "A file (lua table) containing blocks to include in mining.")
 parser.add_option("only", "A file (lua table) containing blocks that should be the only ones mined.")
 parser.add_flag("h", "help", "Show this help message and exit.")
-parser.add_flag("f", "fuel", "Attempt to refuel as needed from ores mined.")
 parser.add_flag("v", "version", "Show version information and exit.")
 parser.add_flag("l", "level", "Travel in a horizontal line at the current level. Useful for mining sand and other surface ores when used in tandem with include or only.")
 parser.add_flag("m", "muzzle", "Muzzle the dog. This will prevent the dog from barking, but he will be sad.")
@@ -65,9 +64,7 @@ if parsed.flags.version then
   print("Latest update notes:", latest_changes)
   return
 end
-if parsed.flags.fuel then
-  do_fuel = true
-end
+
 if parsed.flags.level then
   horizontal = true
 end
@@ -417,7 +414,7 @@ local function get_closest_ore(initial_facing)
         or block.z < -max_offset or block.z > max_offset
     end
 
-    if not out_of_range and ORE_DICT[block.name] and distance < closest_distance then
+    if not out_of_range --[[and ORE_DICT[block.name]] and distance < closest_distance then
       closest_ore = i
       closest_distance = distance
     end
