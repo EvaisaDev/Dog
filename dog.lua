@@ -415,7 +415,7 @@ local function get_closest_ore(initial_facing)
         or block.z < -max_offset or block.z > max_offset
     end
 
-    if not out_of_range and ORE_DICT[block.name] and distance < closest_distance then
+    if not out_of_range and true and distance < closest_distance then
       closest_ore = i
       closest_distance = distance
     end
