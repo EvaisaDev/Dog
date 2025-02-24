@@ -429,6 +429,8 @@ local function get_closest_ore(initial_facing)
   return closest_ore
 end
 
+-- WAWAWAZWAWAWAW
+
 local dig_context = logging.create_context("Dig")
 
 --- Check if the next ore is in range, and if it is, set the state to seeking.
