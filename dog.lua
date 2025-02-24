@@ -102,7 +102,7 @@ if parsed.arguments[1] then
 end
 
 logging.set_level(log_level)
-logging.set_window(log_win)
+--logging.set_window(log_win)
 
 -- Initial setup
 do
@@ -1026,5 +1026,5 @@ if not ok then
 end
 
 -- ensure the prompt is on the terminal.
---term.setCursorPos(1, ty)
---print()
+term.setCursorPos(1, ty)
+print()
