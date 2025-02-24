@@ -220,6 +220,7 @@ local FORBIDDEN_BLOCKS = {
   ["minecraft:chest"] = true,
   ["minecraft:trapped_chest"] = true,
   ["minecraft:ender_chest"] = true,
+  ["waystones:magenta_sharestone"] = true,
 }
 
 if parsed.options.exclude then
