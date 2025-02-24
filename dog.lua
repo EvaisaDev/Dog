@@ -1023,11 +1023,8 @@ if not ok then
     until return_home()
   end)
 
-  while true do
-	
-  end
 end
 
 -- ensure the prompt is on the terminal.
-term.setCursorPos(1, ty)
-print()
+--term.setCursorPos(1, ty)
+--print()
