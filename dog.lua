@@ -29,7 +29,7 @@ local data_win = window.create(main_win, 1, 8, tx, ty - 7)
 local geoscanner_range = 8
 local max_offset = 8
 local scan = nil ---@type fun():table<integer, table> Set during initialization.
-local do_fuel = false
+local do_fuel = true
 local horizontal = false
 local version = "V0.14.3"
 local latest_changes = [[Added a few more blocks as ores. If you wish to add some that are missing, PRs are open!]]
@@ -38,11 +38,7 @@ local parser = simple_argparse.new_parser("dog", "Dog is a program run on mining
 parser.add_option("depth", "The maximum depth to dig to.", max_depth)
 parser.add_option("loglevel", "The log level to use.", "INFO")
 parser.add_option("georange", "The range to use for the geoscanner, if using Advanced Peripherals.", geoscanner_range)
-parser.add_option("exclude", "A file (lua table) containing ores to exclude from mining.")
-parser.add_option("include", "A file (lua table) containing blocks to include in mining.")
-parser.add_option("only", "A file (lua table) containing blocks that should be the only ones mined.")
 parser.add_flag("h", "help", "Show this help message and exit.")
-parser.add_flag("f", "fuel", "Attempt to refuel as needed from ores mined.")
 parser.add_flag("v", "version", "Show version information and exit.")
 parser.add_flag("l", "level", "Travel in a horizontal line at the current level. Useful for mining sand and other surface ores when used in tandem with include or only.")
 parser.add_flag("m", "muzzle", "Muzzle the dog. This will prevent the dog from barking, but he will be sad.")
@@ -65,9 +61,7 @@ if parsed.flags.version then
   print("Latest update notes:", latest_changes)
   return
 end
-if parsed.flags.fuel then
-  do_fuel = true
-end
+
 if parsed.flags.level then
   horizontal = true
 end
@@ -157,189 +151,11 @@ do
   end
 end
 
--- The following turtle states are used:
--- 1. digdown - The turtle is digging down.
--- 2. seeking - The turtle is mining directly to a specific ore.
--- 3. returning_home - The turtle is returning to the surface.
--- 4. returning_from_seek - The turtle is returning to the last depth reached before seeking.
---
--- The turtle should follow the following steps, on EVERY block. Entering a new
--- should be counted as a "tick".
---
--- 1. Check current state.
--- 2. If digging down:
---   1. Check if the block below is bedrock.
---   2. If it is, change state to returning_home.
---   3. If it is not:
---     1. Scan around the turtle for ores.
---     2. If there are ores, change state to seeking, add ore position to state_info.
---     3. If there are not ores, dig down, then move down.
--- 3. If seeking:
---   1. Calculate direction needed to move to the ore.
---   2. Check if bedrock is blocking the way.
---     1. If it is, change state to returning_home.
---   3. If the turtle is beside the ore, mine it but do not move into it.
---     1. If it is not, move in the calculated direction, breaking blocks as needed.
---   4. If the turtle has collected the ore, scan for ores.
---     1. If there are ores, keep state as seeking, add new ore position to state_info.
---     2. If there are no ores, change state to returning_from_seek.
--- 4. If returning_home:
---   1. Check if the turtle is at the surface.
---   2. If it is, end program.
---   3. If it is not, calculate offset to centerpoint, move in that direction.
---     1. If the turtle is already at the centerpoint, move up.
--- 5. If returning_from_seek:
---   1. Check if the turtle is at the last depth reached before seeking.
---   2. If it is, and the turtle is at the centerpoint, change state to digging down.
---   3. If it is not, calculate offset to centerpoint, move in that direction.
---
--- The turtle does not automatically check fuel levels unless the fuel flag is
--- set. If the fuel flag is set, the turtle will check fuel levels every time it
--- moves, and if it is below 1000, it will attempt to refuel from ores mined.
--- If the turtle is unable to refuel and the distance to home is within 50 of
--- the remaining fuel, it will return home and end the program.
---
--- The turtle will also check for inventory space every time it mines a block,
--- and if it is full, it will return home then return to the last depth reached.
---
--- During all of the above, the turtle should save its state to a file every
--- time it changes state. This file should be loaded on startup, and if it
--- exists, the turtle should resume from where it left off. If the file does
--- not exist, the turtle should assume it is starting from the surface.
 
-local ORE_DICT = {
-  -- ## BASE ORES ##
-  ["minecraft:iron_ore"] = true,
-  ["minecraft:deepslate_iron_ore"] = true,
-  ["minecraft:copper_ore"] = true,
-  ["minecraft:deepslate_copper_ore"] = true,
-  ["minecraft:gold_ore"] = true,
-  ["minecraft:deepslate_gold_ore"] = true,
-  ["minecraft:diamond_ore"] = true,
-  ["minecraft:deepslate_diamond_ore"] = true,
-  ["minecraft:coal_ore"] = true,
-  ["minecraft:deepslate_coal_ore"] = true,
-  ["minecraft:lapis_ore"] = true,
-  ["minecraft:deepslate_lapis_ore"] = true,
-  ["minecraft:emerald_ore"] = true,
-  ["minecraft:deepslate_emerald_ore"] = true,
-  ["minecraft:quartz_ore"] = true,
-  ["minecraft:nether_quartz_ore"] = true,
-  ["minecraft:redstone_ore"] = true,
-  ["minecraft:deepslate_redstone_ore"] = true,
-  ["minecraft:nether_gold_ore"] = true,
-  ["minecraft:ancient_debris"] = true,
-  ["minecraft:glowstone"] = true, -- Not technically an ore, but some might consider it worth collecting if we stumble upon it!
-
-  -- ##  MODDED ORES  ##
-  -- Create
-  ["create:zinc_ore"] = true,
-  ["create_deepslate_zinc_ore"] = true,
-
-  -- Mekanism
-  ["mekanism:tin_ore"] = true,
-  ["mekanism:deepslate_tin_ore"] = true,
-  ["mekanism:osmium_ore"] = true,
-  ["mekanism:deepslate_osmium_ore"] = true,
-  ["mekanism:uranium_ore"] = true,
-  ["mekanism:deepslate_uranium_ore"] = true,
-  ["mekanism:fluorite_ore"] = true,
-  ["mekanism:deepslate_fluorite_ore"] = true,
-  ["mekanism:lead_ore"] = true,
-  ["mekanism:deepslate_lead_ore"] = true,
-
-  -- Thermal
-  ["thermal:apatite_ore"] = true,
-  ["thermal:deepslate_apatite_ore"] = true,
-  ["thermal:cinnabar_ore"] = true,
-  ["thermal:deepslate_cinnabar_ore"] = true,
-  ["thermal:niter_ore"] = true,
-  ["thermal:deepslate_niter_ore"] = true,
-  ["thermal:sulfur_ore"] = true,
-  ["thermal:deepslate_sulfur_ore"] = true,
-  ["thermal:tin_ore"] = true,
-  ["thermal:deepslate_tin_ore"] = true,
-  ["thermal:lead_ore"] = true,
-  ["thermal:deepslate_lead_ore"] = true,
-  ["thermal:silver_ore"] = true,
-  ["thermal:deepslate_silver_ore"] = true,
-  ["thermal:nickel_ore"] = true,
-  ["thermal:deepslate_nickel_ore"] = true,
-  ["thermal:ruby_ore"] = true,
-  ["thermal:deepslate_ruby_ore"] = true,
-  ["thermal:sapphire_ore"] = true,
-  ["thermal:deepslate_sapphire_ore"] = true,
-
-  -- RFTools-Base
-  ["rftoolsbase:dimensionalshard_overworld"] = true,
-  ["rftoolsbase:dimensionalshard_nether"] = true,
-  ["rftoolsbase:dimensionalshard_end"] = true,
-
-  -- Deep Resonance
-  ["deepresonance:resonating_ore_stone"] = true,
-  ["deepresonance:resonating_ore_deepslate"] = true,
-  ["deepresonance:resonating_ore_nether"] = true,
-  ["deepresonance:resonating_ore_end"] = true,
-}
-if parsed.options.exclude then
-  if root_folder:exists(parsed.options.exclude) then
-    local exclude = root_folder:unserialize(parsed.options.exclude)
-    if type(exclude) == "table" then
-      -- it's possible to do both `{["minecraft:ore"] = true}` and `{"minecraft:ore"}`, so we need to check for both.
-      for key, value in pairs(exclude) do
-        if type(key) == "string" then
-          ORE_DICT[key] = nil
-        end
-        if type(value) == "string" then
-          ORE_DICT[value] = nil
-        end
-      end
-    else
-      error("Failed to parse exclude file.", 0)
-    end
-  else
-    error("Exclude file does not exist.", 0)
-  end
-end
-if parsed.options.include then
-  if root_folder:exists(parsed.options.include) then
-    local include = root_folder:unserialize(parsed.options.include)
-    if type(include) == "table" then
-      -- it's possible to do both `{["minecraft:ore"] = true}` and `{"minecraft:ore"}`, so we need to check for both.
-      for key, value in pairs(include) do
-        if type(key) == "string" then
-          ORE_DICT[key] = true
-        end
-        if type(value) == "string" then
-          ORE_DICT[value] = true
-        end
-      end
-    else
-      error("Failed to parse include file.", 0)
-    end
-  else
-    error("Include file does not exist.", 0)
-  end
-end
-if parsed.options.only then
-  if root_folder:exists(parsed.options.only) then
-    local only = root_folder:unserialize(parsed.options.only)
-    if type(only) == "table" then
-      ORE_DICT = {} -- reset the ore dictionary, we're only mining what's in the only file.
-      -- it's possible to do both `{["minecraft:ore"] = true}` and `{"minecraft:ore"}`, so we need to check for both.
-      for key, value in pairs(only) do
-        if type(key) == "string" then
-          ORE_DICT[key] = true
-        end
-        if type(value) == "string" then
-          ORE_DICT[value] = true
-        end
-      end
-    else
-      error("Failed to parse only file.", 0)
-    end
-  else
-    error("Only file does not exist.", 0)
+local function IsOre(name)
+  -- if contains ore in the name
+  if string.find(name, "ore") then
+	return true
   end
 end
 
@@ -390,11 +206,6 @@ end
 
 local ore_context = logging.create_context("Ore")
 
-local function is_ore(block)
-  -- if in ore dict or contains "ore" in the name, it's an ore.
-  return ORE_DICT[block.name] or block.name:find("ore")
-end
-
 --- Get the closest ore to the turtle.
 ---@return integer? closest_ore_index The index of the closest ore in the last scan, or nil if no ores were found in the scan.
 ---@param initial_facing turtle_facing? The direction the turtle was facing when it started digging.
@@ -420,7 +231,7 @@ local function get_closest_ore(initial_facing)
         or block.z < -max_offset or block.z > max_offset
     end
 
-    if not out_of_range and is_ore(block) and distance < closest_distance then
+    if not out_of_range and IsOre(block.name) and distance < closest_distance then
       closest_ore = i
       closest_distance = distance
     end
@@ -428,8 +239,6 @@ local function get_closest_ore(initial_facing)
 
   return closest_ore
 end
-
--- WAWAWAZWAWAWAW
 
 local dig_context = logging.create_context("Dig")
 
@@ -1011,6 +820,7 @@ data_folder:delete(STATE_FILE)
 if not ok then
   sleep() -- in case this was an infinite loop related error.
   main_context.fatal(err)
+  logging.dump_log(LOG_FILE)
   main_context.info("Dumped log as", LOG_FILE)
 
   state.state = "errored"
